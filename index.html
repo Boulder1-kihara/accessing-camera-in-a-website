@@ -64,12 +64,22 @@
             color: red;
             font-size: 16px;
         }
+        #cameraSelect {
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
     <video id="cam" autoplay></video>
     <canvas id="photoCanvas"></canvas>
     <div id="controls">
+        <select id="cameraSelect">
+            <option value="user">Front Camera</option>
+            <option value="environment">Back Camera</option>
+        </select>
         <button id="takePhotoButton">Take Photo</button>
         <button id="retakeButton">Retake</button>
         <button id="saveButton">Save</button>
@@ -85,6 +95,7 @@
         const retakeButton = document.getElementById('retakeButton');
         const saveButton = document.getElementById('saveButton');
         const messageElement = document.getElementById('message');
+        const cameraSelect = document.getElementById('cameraSelect');
 
         const startRecordingButton = document.getElementById('startRecording');
         const stopRecordingButton = document.getElementById('stopRecording');
@@ -93,10 +104,14 @@
         let isRecording = false;
 
         let stream = null; // Store the stream globally
+        let facingMode = 'user'; // Start with front camera
 
         // Function to start the camera
         function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true }) // Request both video and audio
+            navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }, // Use facingMode here
+                    audio: true
+                })
                 .then(streamObj => {
                     stream = streamObj; // Store the stream
                     cam.srcObject = stream;
@@ -119,6 +134,16 @@
 
         // Start the camera when the page loads
         startCamera();
+
+        // Event listener for camera selection
+        cameraSelect.addEventListener('change', () => {
+            facingMode = cameraSelect.value; // Update facingMode
+            // Stop the current stream to release the camera
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            startCamera(); // Restart the camera with the new settings
+        });
 
         takePhotoButton.addEventListener('click', () => {
             // Set canvas dimensions to match video
