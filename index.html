@@ -3,22 +3,213 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>camera</title>
+    <title>Camera and Photo Capture</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #cam, #photoCanvas {
+            border: 2px solid #333;
+            margin-top: 20px;
+            display: block;
+            max-width: 80%;
+            height: auto;
+            max-height: 600px; /* Limit maximum height */
+        }
+        #photoCanvas {
+            display: none; /* Hide canvas initially */
+        }
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #367c39;
+        }
+        #retakeButton {
+            display: none; /* Hide retake button initially */
+            background-color: #f44336;
+        }
+        #retakeButton:hover {
+            background-color: #d32f2f;
+        }
+        #saveButton {
+            display: none; /* Hide save button initially */
+             background-color: #008CBA;
+        }
+        #saveButton:hover {
+            background-color: #007ba7;
+        }
+        #message {
+            margin-top: 10px;
+            color: red;
+            font-size: 16px;
+        }
+    </style>
 </head>
 <body>
-    <video id="cam" autoplay>
-
-    </video>
+    <video id="cam" autoplay></video>
+    <canvas id="photoCanvas"></canvas>
+    <div id="controls">
+        <button id="takePhotoButton">Take Photo</button>
+        <button id="retakeButton">Retake</button>
+        <button id="saveButton">Save</button>
+        <button id="startRecording">Start Recording</button>
+        <button id="stopRecording" disabled>Stop Recording</button>
+        <div id="message"></div>
+    </div>
     <script>
-        const cam = document.getElementById('cam')
+        const cam = document.getElementById('cam');
+        const canvas = document.getElementById('photoCanvas');
+        const context = canvas.getContext('2d');
+        const takePhotoButton = document.getElementById('takePhotoButton');
+        const retakeButton = document.getElementById('retakeButton');
+        const saveButton = document.getElementById('saveButton');
+        const messageElement = document.getElementById('message');
 
-        navigator.mediaDevices.getUserMedia({video: true})
-        .then(stream =>{
-            cam.srcObject = stream;
-        })
-        .catch(error =>{
-            console.error('error missing camera:', error);
+        const startRecordingButton = document.getElementById('startRecording');
+        const stopRecordingButton = document.getElementById('stopRecording');
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        let stream = null; // Store the stream globally
+
+        // Function to start the camera
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true }) // Request both video and audio
+                .then(streamObj => {
+                    stream = streamObj; // Store the stream
+                    cam.srcObject = stream;
+                    cam.onloadedmetadata = () => {
+                        cam.play();
+                    };
+                    messageElement.textContent = ''; // Clear any previous messages
+                    // Enable buttons
+                    takePhotoButton.disabled = false;
+                    startRecordingButton.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error accessing camera:', error);
+                    messageElement.textContent = 'Camera access denied or unavailable.';
+                    // Disable buttons
+                    takePhotoButton.disabled = true;
+                    startRecordingButton.disabled = true;
+                });
+        }
+
+        // Start the camera when the page loads
+        startCamera();
+
+        takePhotoButton.addEventListener('click', () => {
+            // Set canvas dimensions to match video
+            canvas.width = cam.videoWidth;
+            canvas.height = cam.videoHeight;
+            context.drawImage(cam, 0, 0, canvas.width, canvas.height);
+
+            cam.style.display = 'none';
+            canvas.style.display = 'block';
+            takePhotoButton.style.display = 'none';
+            retakeButton.style.display = 'inline-block';
+            saveButton.style.display = 'inline-block';
+            startRecordingButton.disabled = true; // Disable recording during photo
+            stopRecordingButton.disabled = true;
         });
+
+        retakeButton.addEventListener('click', () => {
+            cam.style.display = 'block';
+            canvas.style.display = 'none';
+            takePhotoButton.style.display = 'inline-block';
+            retakeButton.style.display = 'none';
+            saveButton.style.display = 'none';
+            startRecordingButton.disabled = false; // Re-enable recording
+            stopRecordingButton.disabled = isRecording ? false : true;
+            context.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+        });
+
+        saveButton.addEventListener('click', () => {
+            const dataURL = canvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'photo.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+
+        startRecordingButton.addEventListener('click', () => {
+            if (stream) {
+                mediaRecorder = new MediaRecorder(stream);
+                recordedChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'recording.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    recordedChunks = []; // Clear chunks for next recording
+                    isRecording = false;
+                    startRecordingButton.disabled = false; // Enable start again
+                    stopRecordingButton.disabled = true;
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                startRecordingButton.disabled = true;
+                stopRecordingButton.disabled = false;
+                takePhotoButton.disabled = true; // Disable photo while recording
+                retakeButton.style.display = 'none';
+                saveButton.style.display = 'none';
+                messageElement.textContent = 'Recording started...';
+            } else {
+                messageElement.textContent = 'No camera stream available to record.';
+            }
+        });
+
+        stopRecordingButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                messageElement.textContent = 'Recording stopped.';
+            }
+        });
+
+        // Handle error during stream initialization
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            messageElement.textContent = 'getUserMedia is not supported in this browser.';
+            takePhotoButton.disabled = true;
+            startRecordingButton.disabled = true;
+        }
     </script>
 </body>
 </html>
